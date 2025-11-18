@@ -1,0 +1,29 @@
+{
+  "name": "testing-demo-javascript",
+  "version": "1.0.0",
+  "description": "Demo project for layer-by-layer testing in JavaScript",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:verbose": "jest --verbose",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": [
+    "testing",
+    "jest",
+    "unit-testing",
+    "layered-architecture"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.6.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ]
+  }
+}

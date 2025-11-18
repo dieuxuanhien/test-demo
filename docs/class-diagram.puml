@@ -1,0 +1,116 @@
+@startuml Testing Layer by Layer - Class Diagram
+
+' Model Layer
+package "Model Layer" {
+    class Student {
+        - id: String
+        - name: String
+        - email: String
+        - currentCredits: int
+        - maxCredits: int
+        + Student(id, name, email, maxCredits)
+        + getId(): String
+        + getName(): String
+        + getEmail(): String
+        + getCurrentCredits(): int
+        + getMaxCredits(): int
+        + addCredits(credits: int): void
+    }
+
+    class Course {
+        - id: String
+        - name: String
+        - credits: int
+        - grade: double
+        + Course(id, name, credits)
+        + getId(): String
+        + getName(): String
+        + getCredits(): int
+    }
+
+    class Enrollment {
+        - studentId: String
+        - courseId: String
+        - grade: double
+        + Enrollment(studentId, courseId)
+        + getStudentId(): String
+        + getCourseId(): String
+        + getGrade(): double
+        + setGrade(grade: double): void
+    }
+}
+
+' Repository Layer
+package "Repository Layer" {
+    class StudentRepository {
+        - students: Map<String, Student>
+        + save(student: Student): Student
+        + findById(id: String): Student
+        + findAll(): List<Student>
+    }
+
+    class CourseRepository {
+        - courses: Map<String, Course>
+        + save(course: Course): Course
+        + findById(id: String): Course
+        + findAll(): List<Course>
+    }
+
+    class EnrollmentRepository {
+        - enrollments: List<Enrollment>
+        + save(enrollment: Enrollment): Enrollment
+        + findByStudentId(studentId: String): List<Enrollment>
+        + findByStudentAndCourse(studentId: String, courseId: String): Enrollment
+    }
+}
+
+' Service Layer
+package "Service Layer" {
+    class EnrollmentService {
+        - studentRepository: StudentRepository
+        - courseRepository: CourseRepository
+        - enrollmentRepository: EnrollmentRepository
+        + enroll(studentId: String, courseId: String): Enrollment
+        + calculateGPA(studentId: String): double
+    }
+}
+
+' Controller Layer
+package "Controller Layer" {
+    class EnrollmentController {
+        - enrollmentService: EnrollmentService
+        + enrollStudent(studentId: String, courseId: String): Response
+        + getStudentGPA(studentId: String): Response
+    }
+}
+
+' Relationships
+StudentRepository --> Student : manages
+CourseRepository --> Course : manages
+EnrollmentRepository --> Enrollment : manages
+
+EnrollmentService --> StudentRepository : uses
+EnrollmentService --> CourseRepository : uses
+EnrollmentService --> EnrollmentRepository : uses
+
+EnrollmentController --> EnrollmentService : uses
+
+Enrollment --> Student : references
+Enrollment --> Course : references
+
+note right of EnrollmentService::enroll
+  Business Logic:
+  1. Check if student exists
+  2. Check if course exists
+  3. Check credit limit
+  4. Create enrollment
+end note
+
+note right of EnrollmentService::calculateGPA
+  Business Logic:
+  1. Get all enrollments for student
+  2. Calculate weighted average
+  3. Return GPA
+end note
+
+@enduml
