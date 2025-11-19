@@ -1,163 +1,334 @@
 """
-Unit Tests for EnrollmentService
-These tests focus on the Service layer business logic
+UNIT TESTS for EnrollmentService (Python)
+
+This test module demonstrates:
+1. MOCKING - Using unittest.mock to create mock objects
+2. STUBBING - Defining return values for mock methods
+3. Isolated testing - Testing business logic without real dependencies
+
+Test Doubles Used:
+- MOCK: Repository objects are mocked using Mock() and MagicMock()
+- STUB: We define return values using return_value and side_effect
 """
-import pytest
+
+import unittest
+from unittest.mock import Mock, MagicMock, call
+import sys
+import os
+
+# Add the parent directory to the path so we can import modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.service.enrollment_service import EnrollmentService
 from src.model.student import Student
 from src.model.course import Course
-from src.repository.student_repository import StudentRepository
-from src.repository.course_repository import CourseRepository
-from src.repository.enrollment_repository import EnrollmentRepository
-from src.service.enrollment_service import EnrollmentService
+from src.model.enrollment import Enrollment
 
 
-class TestEnrollmentService:
-    
-    @pytest.fixture
-    def setup(self):
-        """Setup test data before each test"""
-        # Initialize repositories
-        student_repository = StudentRepository()
-        course_repository = CourseRepository()
-        enrollment_repository = EnrollmentRepository()
-        
-        # Initialize service
-        enrollment_service = EnrollmentService(
-            student_repository,
-            course_repository,
-            enrollment_repository
+class TestEnrollmentService(unittest.TestCase):
+    """Unit tests for EnrollmentService using mocks and stubs"""
+
+    def setUp(self):
+        """
+        Set up test fixtures before each test
+        Creates MOCK repositories instead of real ones
+        """
+        # Create MOCK repositories - these are test doubles
+        self.mock_student_repo = Mock()
+        self.mock_course_repo = Mock()
+        self.mock_enrollment_repo = Mock()
+
+        # Inject mocked dependencies into the service
+        self.enrollment_service = EnrollmentService(
+            self.mock_student_repo,
+            self.mock_course_repo,
+            self.mock_enrollment_repo
         )
-        
-        # Create test students
-        student1 = Student("S001", "John Doe", "john@example.com", 18)
-        student2 = Student("S002", "Jane Smith", "jane@example.com", 12)
-        student_repository.save(student1)
-        student_repository.save(student2)
-        
-        # Create test courses
-        course1 = Course("C001", "Math 101", 3)
-        course2 = Course("C002", "Physics 101", 4)
-        course3 = Course("C003", "Chemistry 101", 3)
-        course_repository.save(course1)
-        course_repository.save(course2)
-        course_repository.save(course3)
-        
-        return {
-            'service': enrollment_service,
-            'student_repo': student_repository,
-            'course_repo': course_repository,
-            'enrollment_repo': enrollment_repository
-        }
-    
-    def test_enrollment_student_not_found(self, setup):
+
+    # ==================== ENROLLMENT TESTS ====================
+
+    def test_enroll_success(self):
         """
-        Test Case 1: Student does not exist
-        Expected: Should raise ValueError
+        Test successful enrollment when all conditions are met
+        Demonstrates: STUBBING repository responses for happy path
         """
-        service = setup['service']
-        non_existent_student_id = "S999"
-        valid_course_id = "C001"
+        # ARRANGE - Set up test data
+        student_id = 'S001'
+        course_id = 'C001'
         
-        # Act & Assert
-        with pytest.raises(ValueError) as exc_info:
-            service.enroll(non_existent_student_id, valid_course_id)
-        
-        assert "Student not found" in str(exc_info.value)
-        print(f"✓ Test 1 passed: {exc_info.value}")
-    
-    def test_enrollment_course_not_found(self, setup):
+        student = Student(student_id, 'John Doe', 'john@example.com', 18)
+        course = Course(course_id, 'Java Programming', 3)
+
+        # STUB - Define what mocked methods should return
+        self.mock_student_repo.find_by_id.return_value = student
+        self.mock_course_repo.find_by_id.return_value = course
+        self.mock_enrollment_repo.save.return_value = None  # save doesn't return anything
+
+        # ACT - Execute the method under test
+        result = self.enrollment_service.enroll(student_id, course_id)
+
+        # ASSERT - Verify the results
+        self.assertIsNotNone(result, "Enrollment should not be None")
+        self.assertEqual(result.student_id, student_id)
+        self.assertEqual(result.course_id, course_id)
+        self.assertEqual(student.current_credits, 3, "Student should have 3 credits")
+
+        # Verify interactions with mocks
+        self.mock_student_repo.find_by_id.assert_called_once_with(student_id)
+        self.mock_course_repo.find_by_id.assert_called_once_with(course_id)
+        self.mock_enrollment_repo.save.assert_called_once()
+        self.mock_student_repo.save.assert_called_once_with(student)
+
+    def test_enroll_student_not_found(self):
         """
-        Test Case 2: Course does not exist
-        Expected: Should raise ValueError
+        Test enrollment fails when student doesn't exist
+        Demonstrates: STUB returning None to simulate missing data
         """
-        service = setup['service']
-        valid_student_id = "S001"
-        non_existent_course_id = "C999"
-        
-        # Act & Assert
-        with pytest.raises(ValueError) as exc_info:
-            service.enroll(valid_student_id, non_existent_course_id)
-        
-        assert "Course not found" in str(exc_info.value)
-        print(f"✓ Test 2 passed: {exc_info.value}")
-    
-    def test_enrollment_exceeds_credit_limit(self, setup):
+        # ARRANGE
+        student_id = 'S999'
+        course_id = 'C001'
+
+        # STUB - Return None to simulate student not found
+        self.mock_student_repo.find_by_id.return_value = None
+
+        # ACT & ASSERT - Verify exception is raised
+        with self.assertRaises(ValueError) as context:
+            self.enrollment_service.enroll(student_id, course_id)
+
+        self.assertIn('Student not found', str(context.exception))
+        self.assertIn(student_id, str(context.exception))
+
+        # Verify we only tried to find the student (didn't proceed further)
+        self.mock_student_repo.find_by_id.assert_called_once_with(student_id)
+        self.mock_course_repo.find_by_id.assert_not_called()
+        self.mock_enrollment_repo.save.assert_not_called()
+
+    def test_enroll_course_not_found(self):
         """
-        Test Case 3: Student exceeds credit limit
-        Expected: Should raise RuntimeError
+        Test enrollment fails when course doesn't exist
+        Demonstrates: STUB with conditional returns
         """
-        service = setup['service']
-        course_repo = setup['course_repo']
-        
-        student_id = "S002"  # Has max 12 credits
-        course_id1 = "C001"  # 3 credits
-        course_id2 = "C002"  # 4 credits
-        
-        # Enroll in first two courses (3 + 4 = 7 credits)
-        service.enroll(student_id, course_id1)
-        service.enroll(student_id, course_id2)
-        
-        # Create a new course that would exceed limit
-        large_course = Course("C004", "Advanced Topics", 6)
-        course_repo.save(large_course)
-        
-        # Act & Assert - trying to add 6 more credits (total would be 13 > 12)
-        with pytest.raises(RuntimeError) as exc_info:
-            service.enroll(student_id, "C004")
-        
-        assert "exceeds maximum credit limit" in str(exc_info.value)
-        print(f"✓ Test 3 passed: {exc_info.value}")
-    
-    def test_enrollment_success(self, setup):
+        # ARRANGE
+        student_id = 'S001'
+        course_id = 'C999'
+        student = Student(student_id, 'John Doe', 'john@example.com', 18)
+
+        # STUB - Student exists, but course does not
+        self.mock_student_repo.find_by_id.return_value = student
+        self.mock_course_repo.find_by_id.return_value = None
+
+        # ACT & ASSERT
+        with self.assertRaises(ValueError) as context:
+            self.enrollment_service.enroll(student_id, course_id)
+
+        self.assertIn('Course not found', str(context.exception))
+        self.assertIn(course_id, str(context.exception))
+
+        # Verify repository interactions
+        self.mock_student_repo.find_by_id.assert_called_once_with(student_id)
+        self.mock_course_repo.find_by_id.assert_called_once_with(course_id)
+        self.mock_enrollment_repo.save.assert_not_called()
+
+    def test_enroll_credit_limit_exceeded(self):
         """
-        Test Case 4: Successful enrollment
-        Expected: Enrollment created, student credits updated
+        Test enrollment fails when credit limit would be exceeded
+        Demonstrates: STUB with pre-configured object state
         """
-        service = setup['service']
-        student_repo = setup['student_repo']
-        course_repo = setup['course_repo']
-        
-        student_id = "S001"
-        course_id = "C001"
-        student = student_repo.find_by_id(student_id)
-        course = course_repo.find_by_id(course_id)
-        initial_credits = student.current_credits
-        
-        # Act
-        enrollment = service.enroll(student_id, course_id)
-        
-        # Assert
-        assert enrollment is not None
-        assert enrollment.student_id == student_id
-        assert enrollment.course_id == course_id
-        
-        # Verify student credits were updated
-        updated_student = student_repo.find_by_id(student_id)
-        assert updated_student.current_credits == initial_credits + course.credits
-        
-        print("✓ Test 4 passed: Enrollment successful")
-        print(f"  Student credits updated: {initial_credits} → {updated_student.current_credits}")
-    
-    def test_calculate_gpa(self, setup):
+        # ARRANGE
+        student_id = 'S001'
+        course_id = 'C001'
+
+        # Student with 15 credits out of 18 max
+        student = Student(student_id, 'John Doe', 'john@example.com', 18)
+        student.add_credits(15)  # Already has 15 credits
+
+        # Course with 4 credits (would exceed 18 limit)
+        course = Course(course_id, 'Advanced Programming', 4)
+
+        # STUB
+        self.mock_student_repo.find_by_id.return_value = student
+        self.mock_course_repo.find_by_id.return_value = course
+
+        # ACT & ASSERT
+        with self.assertRaises(RuntimeError) as context:
+            self.enrollment_service.enroll(student_id, course_id)
+
+        self.assertIn('exceeds maximum credit limit', str(context.exception))
+
+        # Verify we checked student and course but didn't save
+        self.mock_student_repo.find_by_id.assert_called_once()
+        self.mock_course_repo.find_by_id.assert_called_once()
+        self.mock_enrollment_repo.save.assert_not_called()
+        self.mock_student_repo.save.assert_not_called()
+
+    # ==================== GPA CALCULATION TESTS ====================
+
+    def test_calculate_gpa_multiple_enrollments(self):
         """
-        Bonus Test: Calculate GPA correctly
+        Test GPA calculation with multiple courses
+        Demonstrates: STUB with list returns and side_effect for multiple calls
         """
-        service = setup['service']
+        # ARRANGE
+        student_id = 'S001'
+        student = Student(student_id, 'John Doe', 'john@example.com', 18)
+
+        # Create courses with different credits
+        course1 = Course('C001', 'Java Programming', 3)
+        course2 = Course('C002', 'Data Structures', 4)
+        course3 = Course('C003', 'Web Development', 3)
+
+        # Create enrollments with grades
+        enrollment1 = Enrollment(student_id, 'C001')
+        enrollment1.grade = 4.0  # A grade
+
+        enrollment2 = Enrollment(student_id, 'C002')
+        enrollment2.grade = 3.5  # B+ grade
+
+        enrollment3 = Enrollment(student_id, 'C003')
+        enrollment3.grade = 3.0  # B grade
+
+        # STUB - Define mock behavior
+        self.mock_student_repo.find_by_id.return_value = student
+        self.mock_enrollment_repo.find_by_student_id.return_value = [
+            enrollment1, enrollment2, enrollment3
+        ]
+
+        # STUB - Use side_effect to return different courses for different IDs
+        def find_course(course_id):
+            courses = {'C001': course1, 'C002': course2, 'C003': course3}
+            return courses.get(course_id)
         
-        student_id = "S001"
+        self.mock_course_repo.find_by_id.side_effect = find_course
+
+        # ACT
+        gpa = self.enrollment_service.calculate_gpa(student_id)
+
+        # ASSERT
+        # Expected GPA = (4.0*3 + 3.5*4 + 3.0*3) / (3+4+3) = (12 + 14 + 9) / 10 = 3.5
+        self.assertAlmostEqual(gpa, 3.5, places=2)
+
+        # Verify mock interactions
+        self.mock_student_repo.find_by_id.assert_called_once_with(student_id)
+        self.mock_enrollment_repo.find_by_student_id.assert_called_once_with(student_id)
+        self.assertEqual(self.mock_course_repo.find_by_id.call_count, 3)
+
+    def test_calculate_gpa_no_enrollments(self):
+        """
+        Test GPA returns 0.0 when student has no enrollments
+        Demonstrates: STUB returning empty list
+        """
+        # ARRANGE
+        student_id = 'S001'
+        student = Student(student_id, 'John Doe', 'john@example.com', 18)
+
+        # STUB - Student exists but has no enrollments
+        self.mock_student_repo.find_by_id.return_value = student
+        self.mock_enrollment_repo.find_by_student_id.return_value = []
+
+        # ACT
+        gpa = self.enrollment_service.calculate_gpa(student_id)
+
+        # ASSERT
+        self.assertEqual(gpa, 0.0)
+
+        self.mock_student_repo.find_by_id.assert_called_once_with(student_id)
+        self.mock_enrollment_repo.find_by_student_id.assert_called_once_with(student_id)
+        self.mock_course_repo.find_by_id.assert_not_called()
+
+    def test_calculate_gpa_student_not_found(self):
+        """
+        Test GPA calculation fails when student doesn't exist
+        Demonstrates: STUB returning None for error condition
+        """
+        # ARRANGE
+        student_id = 'S999'
+
+        # STUB - Return None for non-existent student
+        self.mock_student_repo.find_by_id.return_value = None
+
+        # ACT & ASSERT
+        with self.assertRaises(ValueError) as context:
+            self.enrollment_service.calculate_gpa(student_id)
+
+        self.assertIn('Student not found', str(context.exception))
+        self.assertIn(student_id, str(context.exception))
+
+        self.mock_student_repo.find_by_id.assert_called_once_with(student_id)
+        self.mock_enrollment_repo.find_by_student_id.assert_not_called()
+
+    def test_calculate_gpa_missing_course(self):
+        """
+        Test GPA calculation handles missing course data gracefully
+        Demonstrates: STUB with partial data (some courses missing)
+        """
+        # ARRANGE
+        student_id = 'S001'
+        student = Student(student_id, 'John Doe', 'john@example.com', 18)
+
+        course1 = Course('C001', 'Java Programming', 3)
+
+        enrollment1 = Enrollment(student_id, 'C001')
+        enrollment1.grade = 4.0
+
+        enrollment2 = Enrollment(student_id, 'C999')  # Course doesn't exist
+        enrollment2.grade = 3.5
+
+        # STUB
+        self.mock_student_repo.find_by_id.return_value = student
+        self.mock_enrollment_repo.find_by_student_id.return_value = [enrollment1, enrollment2]
         
-        # Enroll in courses
-        e1 = service.enroll(student_id, "C001")  # 3 credits
-        e2 = service.enroll(student_id, "C002")  # 4 credits
+        # STUB - Return course for C001, None for C999
+        def find_course(course_id):
+            return course1 if course_id == 'C001' else None
         
-        # Set grades
-        e1.set_grade(3.5)  # Math: 3.5 GPA, 3 credits
-        e2.set_grade(4.0)  # Physics: 4.0 GPA, 4 credits
+        self.mock_course_repo.find_by_id.side_effect = find_course
+
+        # ACT
+        gpa = self.enrollment_service.calculate_gpa(student_id)
+
+        # ASSERT
+        # Should only calculate GPA for valid course (C001)
+        # Expected: (4.0 * 3) / 3 = 4.0
+        self.assertAlmostEqual(gpa, 4.0, places=2)
+
+    # ==================== DEMONSTRATING DIFFERENT MOCK TECHNIQUES ====================
+
+    def test_mock_verification_with_specific_arguments(self):
+        """
+        Demonstrates: Verifying that mocks were called with specific arguments
+        This is a MOCK behavior (verifying interactions)
+        """
+        # ARRANGE
+        student_id = 'S001'
+        student = Student(student_id, 'John Doe', 'john@example.com', 18)
+        course = Course('C001', 'Java', 3)
+
+        self.mock_student_repo.find_by_id.return_value = student
+        self.mock_course_repo.find_by_id.return_value = course
+
+        # ACT
+        self.enrollment_service.enroll(student_id, 'C001')
+
+        # MOCK VERIFICATION - Checking HOW the mock was used
+        self.mock_student_repo.save.assert_called_once()
+        # Verify the student object passed has updated credits
+        saved_student = self.mock_student_repo.save.call_args[0][0]
+        self.assertEqual(saved_student.current_credits, 3)
+
+    def test_stub_with_side_effect_for_exceptions(self):
+        """
+        Demonstrates: Using side_effect to make stub raise exceptions
+        """
+        # ARRANGE
+        student_id = 'S001'
         
-        # Act
-        gpa = service.calculate_gpa(student_id)
-        
-        # Assert
-        # Expected GPA = (3.5*3 + 4.0*4) / (3+4) = (10.5 + 16) / 7 = 26.5 / 7 = 3.785...
-        assert abs(gpa - 3.785) < 0.01
-        print(f"✓ Bonus test passed: GPA = {gpa:.2f}")
+        # STUB - Make the mock raise an exception
+        self.mock_student_repo.find_by_id.side_effect = ConnectionError("Database unavailable")
+
+        # ACT & ASSERT
+        with self.assertRaises(ConnectionError):
+            self.enrollment_service.enroll(student_id, 'C001')
+
+
+if __name__ == '__main__':
+    unittest.main()

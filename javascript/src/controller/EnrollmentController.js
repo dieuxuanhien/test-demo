@@ -13,7 +13,7 @@ class EnrollmentController {
     enrollStudent(studentId, courseId) {
         try {
             const enrollment = this.enrollmentService.enroll(studentId, courseId);
-            return `SUCCESS: Student ${studentId} enrolled in course ${courseId}`;
+            return `SUCCESS: Student ${studentId} enrolled in course ${enrollment.courseId}`;
         } catch (error) {
             return `ERROR: ${error.message}`;
         }
